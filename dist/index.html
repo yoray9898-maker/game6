@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=640, user-scalable=no">
-    <title>元素戰爭：完整移動版</title>
+    <title>元素戰爭：流暢移動修正版</title>
     <style>
         * { -webkit-tap-highlight-color: transparent; outline: none; box-sizing: border-box; }
         body { display: flex; flex-direction: column; align-items: center; background: #2c3e50; color: white; font-family: sans-serif; margin: 0; padding-top: 15px; touch-action: none; overflow: hidden; }
@@ -114,7 +114,7 @@
             ctx.beginPath(); 
             ctx.setLineDash([8, 6]); 
             ctx.strokeStyle="rgba(255,255,255,0.6)"; 
-            ctx.lineWidth = 3; // 保持加粗
+            ctx.lineWidth = 3; 
             ctx.arc(x,y,r,0,Math.PI*2); 
             ctx.stroke(); 
             ctx.setLineDash([]); 
@@ -132,8 +132,6 @@
 
             towers.forEach(t => { 
                 ctx.fillStyle=t.color; ctx.fillRect(t.x+2,t.y+2,36,36);
-                
-                // 等級置中
                 ctx.fillStyle="white"; 
                 ctx.font="bold 14px Arial"; 
                 ctx.textAlign="center"; 
@@ -151,7 +149,7 @@
                     else {
                         let inRange = enemies.filter(e => Math.hypot(e.x+20-(t.x+20), e.y+20-(t.y+20)) < t.range);
                         if(inRange.length > 0) {
-                            let target = inRange.sort((a,b) => b.ti - a.ti || a.dToEnd - b.dToEnd)[0];
+                            let target = inRange.sort((a,b) => b.ti - a.ti)[0];
                             if(t.type === 'tesla') {
                                 let chainCount = t.lv >= 3 ? Math.min(8, 2 + Math.floor((t.lv-3)/2)) : 1;
                                 let lastObj = {x: t.x+20, y: t.y+20}, currentTarget = target, hitRegistry = [];
@@ -160,15 +158,12 @@
                                     hitRegistry.push(currentTarget.id);
                                     ctx.beginPath(); ctx.moveTo(lastObj.x, lastObj.y); ctx.lineTo(currentTarget.x+20, currentTarget.y+20);
                                     ctx.strokeStyle = "#81ecec"; ctx.lineWidth = 3; ctx.stroke();
-                                    if(t.lv >= 5) currentTarget.vuln = 120;
-                                    let isRepeat = hitRegistry.slice(0,-1).includes(currentTarget.id);
-                                    let finalDmg = t.dmg * (currentTarget.vuln > 0 ? 1.2 : 1.0) * (isRepeat ? 0.6 : 1.0);
+                                    let finalDmg = t.dmg * (currentTarget.vuln > 0 ? 1.2 : 1.0);
                                     currentTarget.hp -= finalDmg;
-                                    addText(currentTarget.x+20, currentTarget.y, Math.floor(finalDmg), isRepeat ? "#bdc3c7":"#81ecec", 14);
+                                    addText(currentTarget.x+20, currentTarget.y, Math.floor(finalDmg), "#81ecec", 14);
                                     lastObj = {x: currentTarget.x+20, y: currentTarget.y+20};
-                                    let neighbors = enemies.filter(e => Math.hypot(e.x+20-lastObj.x, e.y+20-lastObj.y) < 80);
-                                    let fresh = neighbors.filter(e => !hitRegistry.includes(e.id));
-                                    currentTarget = fresh.length > 0 ? fresh.sort((a,b)=>b.ti-a.ti)[0] : neighbors[0];
+                                    let neighbors = enemies.filter(e => Math.hypot(e.x+20-lastObj.x, e.y+20-lastObj.y) < 80 && !hitRegistry.includes(e.id));
+                                    currentTarget = neighbors.length > 0 ? neighbors[0] : null;
                                 }
                             } else { bullets.push({x:t.x+20,y:t.y+20,target:target,dmg:t.dmg,t:t}); }
                             t.cd=t.cdM; 
@@ -179,36 +174,36 @@
 
             enemies = enemies.filter(e => {
                 if(e.vuln > 0) e.vuln--;
-                if(e.hp < e.max*0.3 && e.boss && !e.en) { 
-                    e.en=true; e.sp*=2; e.pwr=120; addText(e.x, e.y-20, "BERSERK!!", "#ff3f34", 20); 
-                    let canFz = towers.filter(t=>t.fz<=0); if(canFz.length>0) canFz[Math.floor(Math.random()*canFz.length)].fz=180;
-                }
-                
-                // 狀態顏色
                 if(e.st > 0) { ctx.fillStyle = "#f1c40f"; e.st--; }
                 else if(e.sl && e.sl.l > 0) { ctx.fillStyle = "#48dbfb"; }
                 else { ctx.fillStyle = e.boss?"#8e44ad":e.isTank?"#7f8c8d":e.isScout?"#2ecc71":"#c0392b"; }
 
                 let s = e.sp; 
                 if(e.st <= 0) {
-                    if(e.pwr<=0 && e.sl && e.sl.l>0) { s *= e.sl.v; e.sl.l--; }
-                    let tar=path[e.ti], dx=tar.x*40-e.x, dy=tar.y*40-e.y, d=Math.sqrt(dx*dx+dy*dy);
-                    if(d<2) { 
-                        e.ti++; 
-                        if(e.ti>=path.length) { health-=e.boss?10:1; return false; } 
-                    } else { 
-                        // 敵人恢復移動
-                        e.x+=dx/d*s; 
-                        e.y+=dy/d*s; 
+                    if(e.sl && e.sl.l>0) { s *= e.sl.v; e.sl.l--; }
+                    
+                    // --- 穩定的移動判定 ---
+                    let tar = path[e.ti];
+                    let dx = tar.x * 40 - e.x;
+                    let dy = tar.y * 40 - e.y;
+                    let d = Math.sqrt(dx * dx + dy * dy);
+
+                    if (d < 5) { // 到達目標點
+                        e.ti++;
+                        if (e.ti >= path.length) {
+                            health -= e.boss ? 10 : 1;
+                            return false;
+                        }
+                    } else {
+                        // 朝向目標點移動
+                        e.x += (dx / d) * s;
+                        e.y += (dy / d) * s;
                     }
                 }
 
                 ctx.beginPath(); ctx.arc(e.x+20,e.y+20,e.boss?18:e.isTank?14:10,0,Math.PI*2); ctx.fill();
-                if(e.pwr>0) { e.pwr--; ctx.strokeStyle="#ff3f34"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(e.x+20,e.y+20,22,0,Math.PI*2); ctx.stroke(); if(e.pwr===0) e.sp/=2; }
-                
                 ctx.fillStyle="#000"; ctx.fillRect(e.x, e.y-10, 40, 4);
                 ctx.fillStyle="#2ecc71"; ctx.fillRect(e.x, e.y-10, 40*(e.hp/e.max), 4);
-                
                 if(e.hp<=0) money += Math.floor((e.boss?100:10)*mG);
                 return e.hp>0;
             });
@@ -216,32 +211,27 @@
             bullets = bullets.filter(b => { 
                 let dx=b.target.x+20-b.x, dy=b.target.y+20-b.y, d=Math.sqrt(dx*dx+dy*dy); 
                 if(d<15) { 
-                    let dmg = b.dmg * (b.target.vuln > 0 ? 1.2 : 1.0);
-                    let c="#fff", fs=14;
-                    if(b.t.type==='gun' && b.t.lv>=3 && Math.random()<0.3) { dmg*=2.5; c="#ff3f34"; fs=18; }
-                    if(b.t.type==='bomb' && b.t.lv>=3 && Math.random()<0.2) { dmg*=5; c="#f1c40f"; fs=22; }
+                    let dmg = b.dmg;
+                    if(b.t.type==='gun' && b.t.lv>=3 && Math.random()<0.3) { dmg*=2.5; addText(b.target.x+20,b.target.y,Math.floor(dmg),"#ff3f34",18); }
+                    else if(b.t.type==='bomb' && b.t.lv>=3 && Math.random()<0.2) { dmg*=5; addText(b.target.x+20,b.target.y,Math.floor(dmg),"#f1c40f",22); }
+                    else { addText(b.target.x+20,b.target.y,Math.floor(dmg),"#fff",14); }
                     if(b.t.type==='ice') b.target.sl={v:0.5,l:40};
-                    b.target.hp-=dmg; addText(b.target.x+20,b.target.y,Math.floor(dmg),c,fs); return false; 
+                    b.target.hp-=dmg; return false; 
                 } 
                 b.x+=dx/d*12; b.y+=dy/d*12; ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(b.x,b.y,3,0,Math.PI*2); ctx.fill(); return b.target.hp>0; 
             });
 
             traps = traps.filter(p => { 
-                if(p.isM) {
-                    p.l--; ctx.fillStyle="rgba(142,68,173,0.3)"; ctx.beginPath(); ctx.arc(p.x+20,p.y+20,60,0,Math.PI*2); ctx.fill(); 
-                    enemies.forEach(e => { if(Math.hypot(e.x-p.x, e.y-p.y)<60) e.sl={v:0.4,l:2}; }); return p.l>0;
-                } else {
-                    ctx.fillStyle="#2c3e50"; ctx.fillRect(p.x+12,p.y+12,16,16); 
-                    let e = enemies.find(i=>Math.hypot(i.x-p.x, i.y-p.y)<30); 
-                    if(e) { e.hp-=p.dmg; e.st=e.boss?30:60; if(p.lv>=7){ p.isM=true; p.l=180; return true; } return false; } return true;
-                }
+                ctx.fillStyle="#2c3e50"; ctx.fillRect(p.x+12,p.y+12,16,16); 
+                let e = enemies.find(i=>Math.hypot(i.x-p.x, i.y-p.y)<30); 
+                if(e) { e.hp-=p.dmg; e.st=e.boss?30:60; return false; } return true;
             });
 
             spawns = spawns.filter(s => { 
                 let p=path[s.ti], d=Math.hypot(p.x*40-s.x, p.y*40-s.y); 
                 if(d<5) { s.ti--; if(s.ti<0) return false; } else { s.x+=(p.x*40-s.x)/d*4; s.y+=(p.y*40-s.y)/d*4; } 
                 let e=enemies.find(i=>Math.hypot(i.x-s.x, i.y-s.y)<30); 
-                if(e) { e.hp-=s.dmg; addText(e.x+20, e.y, Math.floor(s.dmg), "#2ecc71", 16); return false; }
+                if(e) { e.hp-=s.dmg; return false; }
                 ctx.fillStyle="#2ecc71"; ctx.beginPath(); ctx.arc(s.x+20,s.y+20,8,0,Math.PI*2); ctx.fill(); return true; 
             });
 
@@ -252,8 +242,8 @@
             if(waveIn && spawnCnt > 0) {
                 if(++timer > 60) {
                     let isB = (totalInWave-spawnCnt+1)===totalInWave && wave%5===0;
-                    let isT = !isB && Math.random()<0.2, isS = !isB && !isT && Math.random()<0.3;
-                    enemies.push({ id: Math.random(), x: path[0].x*40, y: path[0].y*40, ti: 1, hp: 100*Math.pow(hpG, wave-1)*(isB?15:isT?3:1), max: 100*Math.pow(hpG, wave-1)*(isB?15:isT?3:1), sp: isB?1:isS?2.2:1.4, boss: isB, isTank:isT, isScout:isS, vuln: 0 });
+                    // --- 出生即鎖定目標點 1 ---
+                    enemies.push({ id: Math.random(), x: path[0].x*40, y: path[0].y*40, ti: 1, hp: 100*Math.pow(hpG, wave-1)*(isB?15:1), max: 100*Math.pow(hpG, wave-1)*(isB?15:1), sp: isB?1:1.4, boss: isB, vuln: 0 });
                     spawnCnt--; timer=0;
                 }
             } else if(enemies.length === 0 && waveIn) { waveIn = false; setTimeout(() => { if(running) { wave++; startWave(); } }, 2000); }
