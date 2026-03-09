@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=640, user-scalable=no">
-    <title>元素戰爭：終極視覺強化版</title>
+    <title>元素戰爭：完整移動版</title>
     <style>
         * { -webkit-tap-highlight-color: transparent; outline: none; box-sizing: border-box; }
         body { display: flex; flex-direction: column; align-items: center; background: #2c3e50; color: white; font-family: sans-serif; margin: 0; padding-top: 15px; touch-action: none; overflow: hidden; }
@@ -109,7 +109,17 @@
         function upgradeTower() { let cost=Math.floor(props[selT.type][4]*Math.pow(1.6,selT.lv)); if(money>=cost) { money-=cost; selT.lv++; selT.dmg*=1.65; selT.range=Math.min(280,selT.range+10); updateUI(); } }
         function sellTower() { towers=towers.filter(t=>t!==selT); map[Math.floor(selT.y/40)][Math.floor(selT.x/40)]=0; money+=30; deselect(); }
         function updateUI() { if(!selT) return; let cost=Math.floor(props[selT.type][4]*Math.pow(1.6,selT.lv)); document.getElementById('upgradeCost').innerText=cost; document.getElementById('towerInfo').innerText="Lv."+selT.lv; }
-        function drawRange(x, y, r) { ctx.beginPath(); ctx.setLineDash([5,5]); ctx.strokeStyle="rgba(255,255,255,0.5)"; ctx.arc(x,y,r,0,Math.PI*2); ctx.stroke(); ctx.setLineDash([]); }
+        
+        function drawRange(x, y, r) { 
+            ctx.beginPath(); 
+            ctx.setLineDash([8, 6]); 
+            ctx.strokeStyle="rgba(255,255,255,0.6)"; 
+            ctx.lineWidth = 3; // 保持加粗
+            ctx.arc(x,y,r,0,Math.PI*2); 
+            ctx.stroke(); 
+            ctx.setLineDash([]); 
+            ctx.lineWidth = 1; 
+        }
 
         function loop() {
             ctx.clearRect(0,0,600,400);
@@ -122,7 +132,13 @@
 
             towers.forEach(t => { 
                 ctx.fillStyle=t.color; ctx.fillRect(t.x+2,t.y+2,36,36);
-                ctx.fillStyle="white"; ctx.font="bold 10px Arial"; ctx.fillText("Lv"+t.lv, t.x+5, t.y+13);
+                
+                // 等級置中
+                ctx.fillStyle="white"; 
+                ctx.font="bold 14px Arial"; 
+                ctx.textAlign="center"; 
+                ctx.textBaseline="middle"; 
+                ctx.fillText("Lv"+t.lv, t.x+20, t.y+20); 
                 
                 if(t.fz>0) { 
                     t.fz--; ctx.fillStyle="rgba(0, 168, 255, 0.6)"; ctx.fillRect(t.x+2,t.y+2,36,36); 
@@ -168,7 +184,7 @@
                     let canFz = towers.filter(t=>t.fz<=0); if(canFz.length>0) canFz[Math.floor(Math.random()*canFz.length)].fz=180;
                 }
                 
-                // 狀態顏色優先
+                // 狀態顏色
                 if(e.st > 0) { ctx.fillStyle = "#f1c40f"; e.st--; }
                 else if(e.sl && e.sl.l > 0) { ctx.fillStyle = "#48dbfb"; }
                 else { ctx.fillStyle = e.boss?"#8e44ad":e.isTank?"#7f8c8d":e.isScout?"#2ecc71":"#c0392b"; }
@@ -177,7 +193,14 @@
                 if(e.st <= 0) {
                     if(e.pwr<=0 && e.sl && e.sl.l>0) { s *= e.sl.v; e.sl.l--; }
                     let tar=path[e.ti], dx=tar.x*40-e.x, dy=tar.y*40-e.y, d=Math.sqrt(dx*dx+dy*dy);
-                    if(d<2) { e.ti++; if(e.ti>=path.length) { health-=e.boss?10:1; return false; } } else { e.x+=dx/d*s; e.y+=dy/d*s; }
+                    if(d<2) { 
+                        e.ti++; 
+                        if(e.ti>=path.length) { health-=e.boss?10:1; return false; } 
+                    } else { 
+                        // 敵人恢復移動
+                        e.x+=dx/d*s; 
+                        e.y+=dy/d*s; 
+                    }
                 }
 
                 ctx.beginPath(); ctx.arc(e.x+20,e.y+20,e.boss?18:e.isTank?14:10,0,Math.PI*2); ctx.fill();
